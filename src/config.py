@@ -8,8 +8,15 @@ to any constant and defend the number.
 """
 
 import logging
+import os
 from datetime import date, timedelta
 from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# Cloud mode: reduces data volume to fit Streamlit Cloud's 1GB memory limit.
+# Set CLOUD_MODE=1 to generate ~100K rows instead of 1M+.
+# ---------------------------------------------------------------------------
+CLOUD_MODE = os.environ.get("CLOUD_MODE", "0") == "1"
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -50,7 +57,8 @@ START_DATE = END_DATE - timedelta(days=365)
 # Source: Calibrated to typical mid-size inbound contract freight program.
 # Top-20 shipper concentration ~55% matches FreightWaves SONAR Shipper
 # Concentration Index, 2024 (typical inbound program range: 50-60%).
-TOTAL_SHIPMENTS = 1_020_000
+# Cloud mode: 100K rows (same analytics, fits in 1GB RAM).
+TOTAL_SHIPMENTS = 100_000 if CLOUD_MODE else 1_020_000
 NUM_SHIPPERS = 340
 NUM_CARRIERS = 52
 NUM_LANES = 225

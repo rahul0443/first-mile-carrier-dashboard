@@ -35,6 +35,7 @@ def _ensure_warehouse():
         return
     with st.spinner("🔧 Building warehouse for the first time (this takes ~60s)..."):
         import subprocess, sys
+        env = {**__import__("os").environ, "CLOUD_MODE": "1"}
         steps = [
             [sys.executable, "-m", "src.generate_data"],
             [sys.executable, "-m", "src.build_warehouse"],
@@ -45,7 +46,7 @@ def _ensure_warehouse():
         ]
         for cmd in steps:
             subprocess.run(cmd, cwd=str(PROJECT_ROOT), check=True,
-                           capture_output=True)
+                           capture_output=True, env=env)
     st.rerun()
 
 
