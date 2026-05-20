@@ -28,25 +28,52 @@ from src.config import (
     WAREHOUSE_PATH,
 )
 
+import os as _os
+_os.environ.setdefault("CLOUD_MODE", "1" if not WAREHOUSE_PATH.exists() else "0")
+
 
 def _ensure_warehouse():
     """Auto-build the warehouse if it doesn't exist (e.g. on Streamlit Cloud)."""
     if WAREHOUSE_PATH.exists():
         return
-    with st.spinner("🔧 Building warehouse for the first time (this takes ~60s)..."):
-        import subprocess, sys
-        env = {**__import__("os").environ, "CLOUD_MODE": "1"}
-        steps = [
-            [sys.executable, "-m", "src.generate_data"],
-            [sys.executable, "-m", "src.build_warehouse"],
-            [sys.executable, "-m", "src.anomaly_detection"],
-            [sys.executable, "-m", "src.forecasting"],
-            [sys.executable, "-m", "src.pricing_recommendations"],
-            [sys.executable, "-m", "src.excel_pivot_pack"],
+
+    st.info("🔧 First visit — generating data & building warehouse. This takes ~30s…")
+    progress = st.progress(0, text="Generating synthetic shipment data…")
+
+    try:
+        # Step 1: Generate data
+        from src.generate_data import main as gen_main
+        gen_main()
+        progress.progress(40, text="Building DuckDB warehouse…")
+
+        # Step 2: Build warehouse
+        from src.build_warehouse import build
+        build()
+        progress.progress(70, text="Running analytics (optional)…")
+
+        # Step 3-6: Optional analytics — failures won't block the dashboard
+        optional_steps = [
+            "src.anomaly_detection",
+            "src.forecasting",
+            "src.pricing_recommendations",
+            "src.excel_pivot_pack",
         ]
-        for cmd in steps:
-            subprocess.run(cmd, cwd=str(PROJECT_ROOT), check=True,
-                           capture_output=True, env=env)
+        for mod_name in optional_steps:
+            try:
+                import importlib
+                mod = importlib.import_module(mod_name)
+                mod.main()
+            except Exception as e:
+                st.warning(f"⚠️ {mod_name} skipped: {e}")
+
+        progress.progress(100, text="Done!")
+
+    except Exception as e:
+        st.error(f"❌ Build failed: {e}")
+        import traceback
+        st.code(traceback.format_exc())
+        st.stop()
+
     st.rerun()
 
 
@@ -729,7 +756,7 @@ def main():
         "Anomaly Center": page_anomaly_center,
         "What-If Simulator": page_whatif_simulator,
     }
-    selection = st.sidebar.radio("", list(pages.keys()), label_visibility="collapsed")
+    selection = st.sidebar.radio("Page", list(pages.keys()), label_visibility="collapsed")
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("##### 📋 Documentation")
