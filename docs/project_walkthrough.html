@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>First-Mile Carrier Dashboard — Project Deep Dive</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface2: #21262d;
+    --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+    --accent: #58a6ff; --green: #3fb950; --red: #f85149;
+    --orange: #d29922; --purple: #bc8cff; --teal: #39d353;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; line-height: 1.6; }
+
+  /* NAV */
+  nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(13,17,23,0.95); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 24px; }
+  .nav-logo { font-weight: 700; font-size: 1rem; color: var(--accent); white-space: nowrap; }
+  .nav-links { display: flex; gap: 16px; flex-wrap: wrap; }
+  .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.82rem; padding: 4px 8px; border-radius: 6px; transition: all 0.2s; }
+  .nav-links a:hover, .nav-links a.active { color: var(--accent); background: rgba(88,166,255,0.1); }
+
+  /* HERO */
+  .hero { min-height: 100vh; display: flex; align-items: center; justify-content: center; text-align: center; padding: 80px 24px 48px; position: relative; overflow: hidden; }
+  .hero-bg { position: absolute; inset: 0; background: radial-gradient(ellipse 80% 60% at 50% 40%, rgba(88,166,255,0.12) 0%, transparent 70%); }
+  .hero-grid { position: absolute; inset: 0; background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size: 60px 60px; opacity: 0.3; }
+  .hero-content { position: relative; max-width: 900px; }
+  .hero-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(88,166,255,0.1); border: 1px solid rgba(88,166,255,0.3); border-radius: 100px; padding: 6px 16px; font-size: 0.8rem; color: var(--accent); margin-bottom: 24px; }
+  .hero h1 { font-size: clamp(2rem,5vw,3.5rem); font-weight: 800; line-height: 1.15; margin-bottom: 20px; }
+  .hero h1 span { background: linear-gradient(135deg, var(--accent), var(--purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .hero p { font-size: 1.15rem; color: var(--muted); max-width: 600px; margin: 0 auto 40px; }
+  .hero-stats { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; margin-top: 40px; }
+  .hero-stat { text-align: center; }
+  .hero-stat .num { font-size: 2.2rem; font-weight: 800; color: var(--accent); display: block; }
+  .hero-stat .lbl { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+  .pulse { animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  .scroll-hint { margin-top: 48px; color: var(--muted); font-size: 0.85rem; animation: bounce 2s infinite; }
+  @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(8px)} }
+
+  /* SECTIONS */
+  section { padding: 80px 24px; max-width: 1100px; margin: 0 auto; }
+  .section-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--accent); font-weight: 600; margin-bottom: 12px; }
+  .section-title { font-size: clamp(1.6rem,3vw,2.4rem); font-weight: 800; margin-bottom: 16px; }
+  .section-sub { color: var(--muted); font-size: 1.05rem; max-width: 700px; margin-bottom: 48px; }
+  hr.divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+
+  /* CARDS */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; transition: border-color 0.2s, transform 0.2s; }
+  .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .card-grid { display: grid; gap: 20px; }
+  .card-grid-2 { grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); }
+  .card-grid-3 { grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); }
+  .card-grid-4 { grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); }
+
+  /* KPI STRIP */
+  .kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 16px; margin-bottom: 40px; }
+  .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; position: relative; overflow: hidden; }
+  .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 12px 12px 0 0; }
+  .kpi-card.green::before { background: var(--green); }
+  .kpi-card.red::before { background: var(--red); }
+  .kpi-card.orange::before { background: var(--orange); }
+  .kpi-card.accent::before { background: var(--accent); }
+  .kpi-card.purple::before { background: var(--purple); }
+  .kpi-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .kpi-value { font-size: 2rem; font-weight: 800; margin-bottom: 4px; }
+  .kpi-delta { font-size: 0.8rem; color: var(--muted); }
+
+  /* PIPELINE FLOW */
+  .pipeline { display: flex; flex-wrap: wrap; gap: 0; align-items: stretch; margin: 40px 0; }
+  .pipe-step { flex: 1; min-width: 140px; background: var(--surface); border: 1px solid var(--border); border-radius: 0; padding: 20px 16px; text-align: center; position: relative; cursor: pointer; transition: all 0.2s; }
+  .pipe-step:first-child { border-radius: 12px 0 0 12px; }
+  .pipe-step:last-child { border-radius: 0 12px 12px 0; }
+  .pipe-step:not(:last-child)::after { content: '→'; position: absolute; right: -12px; top: 50%; transform: translateY(-50%); color: var(--accent); font-size: 1.2rem; z-index: 2; background: var(--bg); padding: 0 2px; }
+  .pipe-step:hover, .pipe-step.active { background: rgba(88,166,255,0.1); border-color: var(--accent); }
+  .pipe-step .icon { font-size: 1.8rem; margin-bottom: 8px; }
+  .pipe-step .name { font-size: 0.75rem; font-weight: 600; color: var(--text); }
+  .pipe-step .rows { font-size: 0.65rem; color: var(--muted); margin-top: 4px; }
+  .pipe-detail { background: var(--surface2); border: 1px solid var(--accent); border-radius: 12px; padding: 28px; margin-top: 0; display: none; }
+  .pipe-detail.visible { display: block; }
+  .pipe-detail h3 { color: var(--accent); margin-bottom: 12px; font-size: 1.1rem; }
+  .pipe-detail p { color: var(--muted); font-size: 0.9rem; margin-bottom: 16px; }
+  .pipe-detail ul { list-style: none; }
+  .pipe-detail ul li::before { content: '→ '; color: var(--accent); }
+  .pipe-detail ul li { font-size: 0.88rem; padding: 4px 0; }
+
+  /* CHARTS */
+  .chart-container { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+  .chart-title { font-size: 0.95rem; font-weight: 600; margin-bottom: 4px; }
+  .chart-sub { font-size: 0.78rem; color: var(--muted); margin-bottom: 20px; }
+  .chart-wrap { position: relative; height: 260px; }
+
+  /* TABS */
+  .tabs { display: flex; gap: 4px; margin-bottom: 24px; flex-wrap: wrap; }
+  .tab { padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
+  .tab:hover { border-color: var(--accent); color: var(--accent); }
+  .tab.active { background: rgba(88,166,255,0.15); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* SQL */
+  .sql-block { background: #0d1117; border: 1px solid var(--border); border-radius: 10px; padding: 20px; font-family: 'JetBrains Mono',Consolas,monospace; font-size: 0.8rem; line-height: 1.7; overflow-x: auto; position: relative; }
+  .sql-block .kw { color: #ff7b72; }
+  .sql-block .fn { color: #d2a8ff; }
+  .sql-block .str { color: #a5d6ff; }
+  .sql-block .num { color: #79c0ff; }
+  .sql-block .cmt { color: #8b949e; font-style: italic; }
+  .sql-block .tbl { color: #3fb950; }
+  .copy-btn { position: absolute; top: 12px; right: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; color: var(--muted); cursor: pointer; font-size: 0.72rem; transition: all 0.2s; }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* TIER TABLE */
+  table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
+  th { text-align: left; padding: 10px 14px; background: var(--surface2); color: var(--muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
+  td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88,166,255,0.05); }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 100px; font-size: 0.72rem; font-weight: 600; }
+  .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-orange { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .badge-red { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge-blue { background: rgba(88,166,255,0.15); color: var(--accent); }
+
+  /* INSIGHTS */
+  .insight-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; cursor: pointer; transition: all 0.2s; }
+  .insight-card:hover { border-color: var(--accent); }
+  .insight-card .num { font-size: 2rem; font-weight: 800; color: rgba(88,166,255,0.3); }
+  .insight-card h3 { font-size: 1rem; margin: 8px 0 8px; }
+  .insight-card .finding { font-size: 0.85rem; color: var(--muted); }
+  .insight-card .rec { margin-top: 12px; padding: 10px; background: rgba(88,166,255,0.05); border-left: 3px solid var(--accent); font-size: 0.82rem; color: var(--accent); display: none; }
+  .insight-card.open .rec { display: block; }
+  .insight-card .toggle { font-size: 0.78rem; color: var(--accent); margin-top: 12px; }
+
+  /* STAR */
+  .star-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 16px; }
+  .star-box { background: var(--surface2); border-radius: 8px; padding: 16px; }
+  .star-box h4 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 8px; }
+  .star-box p { font-size: 0.88rem; }
+
+  /* RESUME */
+  .resume-item { display: flex; gap: 16px; padding: 20px 0; border-bottom: 1px solid var(--border); }
+  .resume-item:last-child { border-bottom: none; }
+  .resume-check { width: 28px; height: 28px; background: rgba(63,185,80,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--green); font-size: 0.9rem; }
+  .resume-item h4 { font-size: 0.95rem; margin-bottom: 4px; }
+  .resume-item p { font-size: 0.85rem; color: var(--muted); }
+
+  /* PROGRESS BAR */
+  .progress-bar { background: var(--surface2); border-radius: 100px; height: 8px; overflow: hidden; margin-top: 8px; }
+  .progress-fill { height: 100%; border-radius: 100px; transition: width 1s ease; }
+
+  /* FOOTER */
+  footer { text-align: center; padding: 48px 24px; color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--border); }
+
+  /* ANIMATIONS */
+  .fade-in { opacity: 0; transform: translateY(20px); transition: opacity 0.6s ease, transform 0.6s ease; }
+  .fade-in.visible { opacity: 1; transform: translateY(0); }
+  .count-up { display: inline-block; }
+
+  @media(max-width:600px) {
+    .hero-stats { gap: 24px; }
+    .star-row { grid-template-columns: 1fr; }
+    .pipe-step:not(:last-child)::after { display: none; }
+  }
+</style>
+</head>
+<body>
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">🚛 AIT BizOps Dashboard</div>
+  <div class="nav-links">
+    <a href="#hero">Home</a>
+    <a href="#bigpicture">Big Picture</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#data">Data</a>
+    <a href="#warehouse">Warehouse</a>
+    <a href="#sql">SQL</a>
+    <a href="#analytics">Analytics</a>
+    <a href="#dashboard">Dashboard</a>
+    <a href="#insights">Insights</a>
+    <a href="#resume">Resume Impact</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero" id="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-grid"></div>
+  <div class="hero-content">
+    <div class="hero-badge"><span class="pulse" style="color:var(--green)">●</span> Live & Running — make all passed 30/30 tests</div>
+    <h1>Amazon AIT BizOps<br><span>Project Deep Dive</span></h1>
+    <p>A complete walkthrough of every system, component, and design decision — explained from scratch, shown with real data from your warehouse.</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><span class="num count-up" data-target="1025275">0</span><span class="lbl">Shipment Records</span></div>
+      <div class="hero-stat"><span class="num count-up" data-target="35">0</span><span class="lbl">SQL Queries</span></div>
+      <div class="hero-stat"><span class="num count-up" data-target="52">0</span><span class="lbl">Carriers</span></div>
+      <div class="hero-stat"><span class="num count-up" data-target="30">0</span><span class="lbl">Tests Passing</span></div>
+      <div class="hero-stat"><span class="num count-up" data-target="9">0</span><span class="lbl">Business Insights</span></div>
+    </div>
+    <div class="scroll-hint">↓ Scroll to explore</div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- BIG PICTURE -->
+<section id="bigpicture" class="fade-in">
+  <div class="section-label">Part 1</div>
+  <div class="section-title">What Did We Actually Build?</div>
+  <div class="section-sub">Think of Amazon as a giant store. Products travel from sellers → Amazon warehouses → your door. The <strong style="color:var(--accent)">first mile</strong> is that seller→warehouse journey. The AIT (Amazon Inbound Transportation) team owns it. Your job as a Business Analyst: make it faster, cheaper, and more reliable.</div>
+
+  <div class="card-grid card-grid-3 fade-in">
+    <div class="card">
+      <div style="font-size:2rem;margin-bottom:12px">🏭</div>
+      <h3 style="margin-bottom:8px;color:var(--accent)">First Mile</h3>
+      <p style="color:var(--muted);font-size:0.88rem">Sellers → Amazon FC. 1,025,275 shipments analyzed. This is <strong>AIT territory</strong> — your team's domain.</p>
+    </div>
+    <div class="card">
+      <div style="font-size:2rem;margin-bottom:12px">📦</div>
+      <h3 style="margin-bottom:8px;color:var(--accent)">Middle Mile</h3>
+      <p style="color:var(--muted);font-size:0.88rem">FC → FC. Moving inventory between Amazon's own warehouses. Out of scope for this project.</p>
+    </div>
+    <div class="card">
+      <div style="font-size:2rem;margin-bottom:12px">🏠</div>
+      <h3 style="margin-bottom:8px;color:var(--accent)">Last Mile</h3>
+      <p style="color:var(--muted);font-size:0.88rem">FC → Customer. The "Prime 2-day delivery." Not this team. DSPs and Amazon Logistics own this.</p>
+    </div>
+  </div>
+
+  <div style="margin-top:40px" class="fade-in">
+    <h3 style="margin-bottom:16px;font-size:1.1rem">The JD says: <em style="color:var(--orange)">"Our customer is the shipper."</em></h3>
+    <p style="color:var(--muted);margin-bottom:24px;font-size:0.93rem">Most logistics dashboards lead with <em>carrier</em> performance. Ours leads with <em>shipper</em> health — because that's the Amazon-specific angle. Page 2 of the Streamlit app is a Shipper Health Scorecard. That's intentional and that's what gets remembered.</p>
+    <div class="kpi-strip">
+      <div class="kpi-card green"><div class="kpi-label">Network OTP</div><div class="kpi-value" style="color:var(--orange)">85.5%</div><div class="kpi-delta">Target: 90% — needs intervention ↓</div></div>
+      <div class="kpi-card red"><div class="kpi-label">Avg Cost/Shipment</div><div class="kpi-value" style="color:var(--accent)">$4,239</div><div class="kpi-delta">Across 225 lanes, 12 months</div></div>
+      <div class="kpi-card orange"><div class="kpi-label">Defect Rate</div><div class="kpi-value" style="color:var(--red)">2.64%</div><div class="kpi-delta">Baseline: 2.3% — slightly elevated</div></div>
+      <div class="kpi-card accent"><div class="kpi-label">Total Freight Spend</div><div class="kpi-value" style="color:var(--green)">$4.35B</div><div class="kpi-delta">340 shippers, 52 carriers</div></div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ARCHITECTURE -->
+<section id="architecture" class="fade-in">
+  <div class="section-label">Part 2</div>
+  <div class="section-title">Architecture — How It All Connects</div>
+  <div class="section-sub">One command (<code style="color:var(--accent);background:var(--surface);padding:2px 8px;border-radius:4px">make all</code>) runs the entire pipeline in ~50 seconds. Click each step to learn what it does.</div>
+
+  <div class="pipeline fade-in">
+    <div class="pipe-step" onclick="showPipe(0)"><div class="icon">⚙️</div><div class="name">Config</div><div class="rows">466 constants</div></div>
+    <div class="pipe-step" onclick="showPipe(1)"><div class="icon">🧬</div><div class="name">Generate</div><div class="rows">1,025,275 rows</div></div>
+    <div class="pipe-step" onclick="showPipe(2)"><div class="icon">🗄️</div><div class="name">Warehouse</div><div class="rows">DuckDB star</div></div>
+    <div class="pipe-step" onclick="showPipe(3)"><div class="icon">📊</div><div class="name">SQL Queries</div><div class="rows">35 queries</div></div>
+    <div class="pipe-step" onclick="showPipe(4)"><div class="icon">🔍</div><div class="name">Anomaly</div><div class="rows">835 flagged</div></div>
+    <div class="pipe-step" onclick="showPipe(5)"><div class="icon">📈</div><div class="name">Forecast</div><div class="rows">SARIMAX</div></div>
+    <div class="pipe-step" onclick="showPipe(6)"><div class="icon">💰</div><div class="name">Pricing</div><div class="rows">20 recs</div></div>
+    <div class="pipe-step" onclick="showPipe(7)"><div class="icon">📋</div><div class="name">Excel</div><div class="rows">6 sheets</div></div>
+    <div class="pipe-step" onclick="showPipe(8)"><div class="icon">🖥️</div><div class="name">Dashboard</div><div class="rows">6 pages</div></div>
+    <div class="pipe-step" onclick="showPipe(9)"><div class="icon">✅</div><div class="name">Tests</div><div class="rows">30/30 pass</div></div>
+  </div>
+
+  <div class="pipe-detail" id="pipe-detail">
+    <h3 id="pipe-title"></h3>
+    <p id="pipe-desc"></p>
+    <ul id="pipe-list"></ul>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- DATA -->
+<section id="data" class="fade-in">
+  <div class="section-label">Part 3</div>
+  <div class="section-title">The Data — 1,025,275 Shipments</div>
+  <div class="section-sub">We can't use Amazon's real data (confidential). Instead, we generated <strong>realistic synthetic data</strong> — every number calibrated to public industry benchmarks from FreightWaves, Cass, ATRI, and BTS.</div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('tab-why')">Why Synthetic?</button>
+    <button class="tab" onclick="showTab('tab-what')">What's In Each Row?</button>
+    <button class="tab" onclick="showTab('tab-realism')">Realism Features</button>
+    <button class="tab" onclick="showTab('tab-anomaly-seed')">Injected Anomaly</button>
+  </div>
+
+  <div class="tab-content active" id="tab-why">
+    <div class="card-grid card-grid-2">
+      <div class="card"><h4 style="color:var(--accent);margin-bottom:10px">Why Not Real Data?</h4><p style="color:var(--muted);font-size:0.88rem">Amazon's freight data is proprietary and under NDA. No public shipment-level dataset exists with carrier identity, cost breakdowns, and defect flags at this granularity. Synthetic data lets us control exactly what the data looks like while demonstrating the same analytical skills.</p></div>
+      <div class="card"><h4 style="color:var(--green);margin-bottom:10px">Why It's Still Credible</h4><p style="color:var(--muted);font-size:0.88rem">Every parameter in <code style="color:var(--accent)">src/config.py</code> has a citation comment. OTP baseline = 87% → FreightWaves SONAR. Cost = $2.43/mile → Cass Freight Index 2024. An interviewer can challenge any number and you point to the source.</p></div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-what">
+    <div class="sql-block"><button class="copy-btn" onclick="copySQL(this)">Copy</button>
+<span class="cmt">-- Every row in fact_shipment has these fields:</span>
+<span class="kw">SELECT</span>
+  shipment_id,          <span class="cmt">-- Unique ID: SHP-20251201-0000001</span>
+  carrier_id,           <span class="cmt">-- Which trucking company (52 carriers)</span>
+  lane_id,              <span class="cmt">-- Origin→Destination pair (225 lanes)</span>
+  shipper_id,           <span class="cmt">-- Which seller shipped it (340 shippers)</span>
+  pickup_appt_ts,       <span class="cmt">-- Scheduled pickup time</span>
+  pickup_actual_ts,     <span class="cmt">-- Actual pickup (NULL 0.4% → tracking gap)</span>
+  on_time_pickup,       <span class="cmt">-- TRUE if actual ≤ appt + 15 min tolerance</span>
+  dwell_minutes,        <span class="cmt">-- Time at facility (can be negative = early)</span>
+  defect_flag,          <span class="cmt">-- TRUE if quality issue occurred</span>
+  trailer_utilization_pct, <span class="cmt">-- 0.0–1.0, how full the trailer was</span>
+  linehaul_cost_usd,    <span class="cmt">-- Base transport cost (DECIMAL, not float!)</span>
+  fuel_surcharge_usd,   <span class="cmt">-- ~20% of linehaul</span>
+  accessorial_cost_usd, <span class="cmt">-- Detention, rescheduling, etc.</span>
+  total_cost_usd        <span class="cmt">-- EXACT: linehaul + fuel + accessorial = total</span>
+<span class="kw">FROM</span> <span class="tbl">fact_shipment</span>
+<span class="kw">LIMIT</span> <span class="num">1</span>;
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-realism">
+    <div class="card-grid card-grid-2">
+      <div class="card"><div style="font-size:1.5rem;margin-bottom:8px">📉</div><h4 style="color:var(--accent);margin-bottom:6px">Power-Law Shippers</h4><p style="color:var(--muted);font-size:0.85rem">Top 20 shippers = 54.3% of all volume. Just like real retail: a few giant sellers dominate. Modeled with Pareto distribution (alpha=1.5).</p></div>
+      <div class="card"><div style="font-size:1.5rem;margin-bottom:8px">🎯</div><h4 style="color:var(--accent);margin-bottom:6px">4 Carrier Tiers</h4><p style="color:var(--muted);font-size:0.85rem">Strategic (best OTP, cheapest), Core, Tactical, Spot (worst OTP, most expensive). Each tier has different OTP baselines, defect rates, and cost modifiers.</p></div>
+      <div class="card"><div style="font-size:1.5rem;margin-bottom:8px">🕳️</div><h4 style="color:var(--accent);margin-bottom:6px">Missing Data</h4><p style="color:var(--muted);font-size:0.85rem">0.41% NULL pickup timestamps (EDI/API failures), 0.10% negative dwell (early arrivals). Real data is always messy. Our queries handle both gracefully.</p></div>
+      <div class="card"><div style="font-size:1.5rem;margin-bottom:8px">📅</div><h4 style="color:var(--accent);margin-bottom:6px">Q4 Seasonal Lift</h4><p style="color:var(--muted);font-size:0.85rem">Oct–Dec shows +12% cost-per-mile (confirmed statistically in q33). The SARIMAX forecast captures this pattern automatically.</p></div>
+      <div class="card"><div style="font-size:1.5rem;margin-bottom:8px">💰</div><h4 style="color:var(--accent);margin-bottom:6px">Exact Cost Identity</h4><p style="color:var(--muted);font-size:0.85rem">linehaul + fuel + accessorial = total. Exactly. Across all 1,025,275 rows. Using Python Decimal (not float). Zero tolerance — proven by a test.</p></div>
+      <div class="card"><div style="font-size:1.5rem;margin-bottom:8px">📉</div><h4 style="color:var(--accent);margin-bottom:6px">Churn Signals</h4><p style="color:var(--muted);font-size:0.85rem">5 top-20 shippers show >30% volume decline in last 90 days. The Shipper Health Score detects these before churn becomes irreversible.</p></div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-anomaly-seed">
+    <div class="card" style="border-color:var(--red)">
+      <h4 style="color:var(--red);margin-bottom:12px">🚨 The Injected Anomaly — Our "Hidden Bug"</h4>
+      <p style="color:var(--muted);font-size:0.88rem;margin-bottom:16px">We deliberately planted a 14-day period where one Spot carrier on 3 specific lanes drops to <strong>60% OTP</strong> (network average: 85.5%). The anomaly detector MUST catch this — and it does (z-score = -3.1, flagged within 3 days).</p>
+      <div class="sql-block"><span class="cmt">-- From src/config.py — the planted anomaly:</span>
+INJECTED_ANOMALY = {
+  <span class="str">"carrier_tier"</span>:   <span class="str">"Spot"</span>,        <span class="cmt"># Worst-performing tier</span>
+  <span class="str">"lane_indices"</span>:  [<span class="num">0</span>, <span class="num">1</span>, <span class="num">2</span>],       <span class="cmt"># 3 specific lanes</span>
+  <span class="str">"month_offset"</span>:  <span class="num">7</span>,               <span class="cmt"># Month 8 (Dec 2025)</span>
+  <span class="str">"duration_days"</span>: <span class="num">14</span>,              <span class="cmt"># 2 weeks</span>
+  <span class="str">"degraded_otp"</span>:  <span class="num">0.60</span>            <span class="cmt"># Drops to 60% OTP</span>
+}</div>
+      <p style="color:var(--muted);font-size:0.85rem;margin-top:12px">Interview story: <em>"I planted a known anomaly and verified my detector caught it — that's how I validated the system."</em></p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+<!-- WAREHOUSE -->
+<section id="warehouse" class="fade-in">
+  <div class="section-label">Part 4</div>
+  <div class="section-title">The Star Schema — Database Architecture</div>
+  <div class="section-sub">A "star schema" is a database design where one central table (shipments) is surrounded by lookup tables. Think of the center as "what happened" and the surrounding tables as "details about who and where."</div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;margin-bottom:40px">
+    <div>
+      <div class="chart-container">
+        <div class="chart-title">Database Structure — Star Schema</div>
+        <div class="chart-sub">One fact table, five dimension tables</div>
+        <div style="text-align:center;padding:20px">
+          <div style="background:rgba(88,166,255,0.15);border:2px solid var(--accent);border-radius:12px;padding:16px;display:inline-block;margin-bottom:16px;min-width:180px">
+            <div style="font-weight:800;color:var(--accent)">⭐ fact_shipment</div>
+            <div style="font-size:0.75rem;color:var(--muted)">1,025,275 rows</div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center">
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:0.78rem;text-align:center"><div style="color:var(--green);font-weight:600">dim_carrier</div><div style="color:var(--muted)">52 rows</div></div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:0.78rem;text-align:center"><div style="color:var(--green);font-weight:600">dim_lane</div><div style="color:var(--muted)">225 rows</div></div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:0.78rem;text-align:center"><div style="color:var(--green);font-weight:600">dim_shipper</div><div style="color:var(--muted)">340 rows</div></div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:0.78rem;text-align:center"><div style="color:var(--green);font-weight:600">dim_date</div><div style="color:var(--muted)">366 rows</div></div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:0.78rem;text-align:center"><div style="color:var(--green);font-weight:600">dim_service_type</div><div style="color:var(--muted)">3 rows</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="chart-container">
+        <div class="chart-title">Carrier Tier Performance Matrix</div>
+        <div class="chart-sub">OTP % vs Cost-per-Mile by tier</div>
+        <div class="chart-wrap"><canvas id="tierChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin-bottom:16px;font-size:1.05rem">Carrier Tier Breakdown — Live Data</h3>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+    <table>
+      <thead><tr><th>Tier</th><th>Carriers</th><th>Shipments</th><th>OTP %</th><th>Defect %</th><th>Cost/Mile</th><th>Contract</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge badge-blue">Strategic</span></td><td>8</td><td>422,808</td><td><span style="color:var(--green)">90.2%</span></td><td>1.88%</td><td>$3.23</td><td>Dedicated</td></tr>
+        <tr><td><span class="badge badge-green">Core</span></td><td>16</td><td>322,075</td><td><span style="color:var(--orange)">85.4%</span></td><td>2.58%</td><td>$3.52</td><td>Contract</td></tr>
+        <tr><td><span class="badge badge-orange">Tactical</span></td><td>18</td><td>200,842</td><td><span style="color:var(--orange)">80.4%</span></td><td>3.54%</td><td>$3.62</td><td>Contract</td></tr>
+        <tr><td><span class="badge badge-red">Spot</span></td><td>10</td><td>79,550</td><td><span style="color:var(--red)">73.8%</span></td><td>4.68%</td><td>$3.99</td><td>Spot</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- SQL -->
+<section id="sql" class="fade-in">
+  <div class="section-label">Part 5</div>
+  <div class="section-title">35 SQL Queries — The Analytical Engine</div>
+  <div class="section-sub">35 numbered, business-question-first SQL queries. Click a category to see examples. These prove SQL mastery from basic aggregations to statistical hypothesis testing.</div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('sql-ops')">Operations (q01-q10)</button>
+    <button class="tab" onclick="showTab('sql-cost')">Cost (q11-q18)</button>
+    <button class="tab" onclick="showTab('sql-util')">Utilization (q19-q26)</button>
+    <button class="tab" onclick="showTab('sql-stats')">📊 Statistical Tests (q31-q33)</button>
+  </div>
+
+  <div class="tab-content active" id="sql-ops">
+    <div class="sql-block"><button class="copy-btn" onclick="copySQL(this)">Copy</button>
+<span class="cmt">-- q07: Weekly OTP with rolling 4-week average (Window Function)</span>
+<span class="kw">WITH</span> weekly <span class="kw">AS</span> (
+    <span class="kw">SELECT</span>
+        d.year, d.week_of_year,
+        <span class="fn">MIN</span>(d.date) <span class="kw">AS</span> week_start,
+        <span class="fn">AVG</span>(<span class="kw">CASE WHEN</span> f.on_time_pickup <span class="kw">THEN</span> <span class="num">1.0</span> <span class="kw">ELSE</span> <span class="num">0.0</span> <span class="kw">END</span>) <span class="kw">AS</span> otp_rate
+    <span class="kw">FROM</span> <span class="tbl">fact_shipment</span> f
+    <span class="kw">JOIN</span> <span class="tbl">dim_date</span> d <span class="kw">ON</span> f.shipment_date_key = d.date_key
+    <span class="kw">GROUP BY</span> d.year, d.week_of_year
+)
+<span class="kw">SELECT</span>
+    year, week_start,
+    <span class="fn">ROUND</span>(otp_rate * <span class="num">100</span>, <span class="num">1</span>) <span class="kw">AS</span> otp_pct,
+    <span class="cmt">-- Rolling 4-week average using window function:</span>
+    <span class="fn">ROUND</span>(<span class="fn">AVG</span>(otp_rate) <span class="kw">OVER</span> (
+        <span class="kw">ORDER BY</span> year, week_of_year
+        <span class="kw">ROWS BETWEEN</span> <span class="num">3</span> <span class="kw">PRECEDING AND CURRENT ROW</span>
+    ) * <span class="num">100</span>, <span class="num">1</span>) <span class="kw">AS</span> rolling_4w_avg_pct,
+    <span class="num">90.0</span> <span class="kw">AS</span> network_target_pct
+<span class="kw">FROM</span> weekly
+<span class="kw">ORDER BY</span> year, week_of_year;
+    </div>
+    <p style="color:var(--muted);font-size:0.85rem;margin-top:12px">💡 <strong>Technique:</strong> CTE + Window function with ROWS BETWEEN frame. Used to show trend deterioration while smoothing weekly noise.</p>
+  </div>
+
+  <div class="tab-content" id="sql-cost">
+    <div class="sql-block"><button class="copy-btn" onclick="copySQL(this)">Copy</button>
+<span class="cmt">-- q14: Lane Profitability Index vs $2.43/mile benchmark (Cass 2024)</span>
+<span class="kw">SELECT</span>
+    l.lane_id,
+    l.origin_city || <span class="str">' → '</span> || l.dest_fc_id <span class="kw">AS</span> lane,
+    l.lane_type,
+    <span class="fn">COUNT</span>(*) <span class="kw">AS</span> shipment_count,
+    <span class="fn">ROUND</span>(<span class="fn">AVG</span>(f.total_cost_usd / <span class="fn">NULLIF</span>(f.distance_miles, <span class="num">0</span>)), <span class="num">2</span>) <span class="kw">AS</span> observed_cpm,
+    <span class="num">2.43</span> <span class="kw">AS</span> benchmark_cpm,
+    <span class="cmt">-- Profitability index: positive = below benchmark (good)</span>
+    <span class="fn">ROUND</span>((<span class="num">2.43</span> - <span class="fn">AVG</span>(f.total_cost_usd / <span class="fn">NULLIF</span>(f.distance_miles,<span class="num">0</span>)))
+           / <span class="num">2.43</span> * <span class="num">100</span>, <span class="num">1</span>) <span class="kw">AS</span> profitability_index_pct,
+    <span class="kw">CASE WHEN</span> <span class="fn">AVG</span>(f.total_cost_usd/<span class="fn">NULLIF</span>(f.distance_miles,<span class="num">0</span>)) > <span class="num">2.43</span>
+         <span class="kw">THEN</span> <span class="str">'Above benchmark'</span>
+         <span class="kw">ELSE</span> <span class="str">'Below benchmark'</span> <span class="kw">END</span> <span class="kw">AS</span> cost_status
+<span class="kw">FROM</span> <span class="tbl">fact_shipment</span> f
+<span class="kw">JOIN</span> <span class="tbl">dim_lane</span> l <span class="kw">ON</span> f.lane_id = l.lane_id
+<span class="kw">GROUP BY</span> l.lane_id, l.origin_city, l.dest_fc_id, l.lane_type, l.distance_miles
+<span class="kw">HAVING</span> <span class="fn">COUNT</span>(*) >= <span class="num">100</span>
+<span class="kw">ORDER BY</span> profitability_index_pct <span class="kw">ASC</span>;
+    </div>
+  </div>
+
+  <div class="tab-content" id="sql-util">
+    <div class="sql-block"><button class="copy-btn" onclick="copySQL(this)">Copy</button>
+<span class="cmt">-- q21: LTL shipments that look like FTL (modal mismatch)</span>
+<span class="cmt">-- Business question: Are we paying LTL rates for FTL-sized loads?</span>
+<span class="kw">SELECT</span>
+    l.origin_city || <span class="str">' → '</span> || l.dest_fc_id <span class="kw">AS</span> lane,
+    <span class="fn">COUNT</span>(*) <span class="kw">AS</span> ltl_shipment_count,
+    <span class="fn">ROUND</span>(<span class="fn">AVG</span>(f.trailer_utilization_pct) * <span class="num">100</span>, <span class="num">1</span>) <span class="kw">AS</span> avg_utilization_pct,
+    <span class="fn">ROUND</span>(<span class="fn">AVG</span>(f.weight_lbs), <span class="num">0</span>) <span class="kw">AS</span> avg_weight_lbs,
+    <span class="str">'Consider FTL conversion'</span> <span class="kw">AS</span> recommendation
+<span class="kw">FROM</span> <span class="tbl">fact_shipment</span> f
+<span class="kw">JOIN</span> <span class="tbl">dim_lane</span> l <span class="kw">ON</span> f.lane_id = l.lane_id
+<span class="kw">JOIN</span> <span class="tbl">dim_service_type</span> st <span class="kw">ON</span> f.service_type_id = st.service_type_id
+<span class="kw">WHERE</span> st.service_name = <span class="str">'LTL'</span>
+<span class="kw">GROUP BY</span> l.lane_id, l.origin_city, l.dest_fc_id
+<span class="kw">HAVING</span>
+    <span class="fn">AVG</span>(f.trailer_utilization_pct) > <span class="num">0.70</span>  <span class="cmt">-- 70%+ fill = FTL territory</span>
+    <span class="kw">AND</span> <span class="fn">AVG</span>(f.weight_lbs) > <span class="num">30000</span>         <span class="cmt">-- Heavy loads = FTL candidate</span>
+    <span class="kw">AND</span> <span class="fn">COUNT</span>(*) >= <span class="num">20</span>
+<span class="kw">ORDER BY</span> avg_utilization_pct <span class="kw">DESC</span>;
+    </div>
+  </div>
+
+  <div class="tab-content" id="sql-stats">
+    <div style="background:rgba(188,140,255,0.05);border:1px solid rgba(188,140,255,0.3);border-radius:10px;padding:16px;margin-bottom:16px">
+      <p style="color:var(--purple);font-size:0.88rem;font-weight:600">🎓 These 3 queries are the crown jewels. Any analyst can compute an average. Running a statistical test <em>inside SQL</em> and interpreting it in business language is what separates a Business Analyst from a reporting analyst.</p>
+    </div>
+    <div class="sql-block"><button class="copy-btn" onclick="copySQL(this)">Copy</button>
+<span class="cmt">-- q31: Paired t-test — Is Strategic vs Tactical OTP difference real?</span>
+<span class="cmt">-- H0: No difference. If |t| > 1.96, reject at alpha=0.05.</span>
+<span class="kw">WITH</span> lane_tier_otp <span class="kw">AS</span> (
+    <span class="kw">SELECT</span> f.lane_id, c.carrier_tier,
+           <span class="fn">AVG</span>(<span class="kw">CASE WHEN</span> f.on_time_pickup <span class="kw">THEN</span> <span class="num">1.0</span> <span class="kw">ELSE</span> <span class="num">0.0</span> <span class="kw">END</span>) <span class="kw">AS</span> lane_otp
+    <span class="kw">FROM</span> <span class="tbl">fact_shipment</span> f <span class="kw">JOIN</span> <span class="tbl">dim_carrier</span> c <span class="kw">ON</span> f.carrier_id = c.carrier_id
+    <span class="kw">WHERE</span> c.carrier_tier <span class="kw">IN</span> (<span class="str">'Strategic'</span>, <span class="str">'Tactical'</span>)
+    <span class="kw">GROUP BY</span> f.lane_id, c.carrier_tier <span class="kw">HAVING</span> <span class="fn">COUNT</span>(*) >= <span class="num">30</span>
+),
+paired <span class="kw">AS</span> (
+    <span class="kw">SELECT</span> s.lane_otp - t.lane_otp <span class="kw">AS</span> diff
+    <span class="kw">FROM</span> lane_tier_otp s <span class="kw">JOIN</span> lane_tier_otp t <span class="kw">ON</span> s.lane_id = t.lane_id
+    <span class="kw">WHERE</span> s.carrier_tier = <span class="str">'Strategic'</span> <span class="kw">AND</span> t.carrier_tier = <span class="str">'Tactical'</span>
+),
+stats <span class="kw">AS</span> (
+    <span class="kw">SELECT</span> <span class="fn">COUNT</span>(*) <span class="kw">AS</span> n, <span class="fn">AVG</span>(diff) <span class="kw">AS</span> mean_diff, <span class="fn">STDDEV</span>(diff) <span class="kw">AS</span> std_diff
+    <span class="kw">FROM</span> paired
+)
+<span class="kw">SELECT</span>
+    <span class="fn">ROUND</span>(mean_diff * <span class="num">100</span>, <span class="num">2</span>) <span class="kw">AS</span> mean_otp_diff_pp,
+    <span class="fn">ROUND</span>(mean_diff / (std_diff / <span class="fn">SQRT</span>(n)), <span class="num">3</span>) <span class="kw">AS</span> t_statistic,
+    <span class="kw">CASE WHEN</span> <span class="fn">ABS</span>(mean_diff / (std_diff/<span class="fn">SQRT</span>(n))) > <span class="num">1.96</span>
+         <span class="kw">THEN</span> <span class="str">'REJECT H0 — Significant difference (p<0.05)'</span>
+         <span class="kw">ELSE</span> <span class="str">'FAIL TO REJECT H0'</span> <span class="kw">END</span> <span class="kw">AS</span> conclusion
+<span class="kw">FROM</span> stats;
+<span class="cmt">-- Result: t-statistic >> 1.96 → Strategic IS significantly better ✓</span>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+<!-- ANALYTICS -->
+<section id="analytics" class="fade-in">
+  <div class="section-label">Part 6</div>
+  <div class="section-title">Analytics — Anomaly Detection & Forecasting</div>
+  <div class="section-sub">Beyond SQL queries: automated anomaly detection with z-score and IQR methods, plus SARIMAX time-series forecasting for 4-week OTP and 28-day cost predictions.</div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;margin-bottom:32px">
+    <div class="chart-container">
+      <div class="chart-title">Weekly OTP % — Trailing 12 Months</div>
+      <div class="chart-sub">Note the trailing-month deterioration and Q4 injected anomaly</div>
+      <div class="chart-wrap"><canvas id="otpChart"></canvas></div>
+    </div>
+    <div class="chart-container">
+      <div class="chart-title">Monthly Cost-per-Mile Trend</div>
+      <div class="chart-sub">Q4 peak season lift (+12%) is visible Oct–Dec</div>
+      <div class="chart-wrap"><canvas id="cpmChart"></canvas></div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px">
+    <div class="card">
+      <h3 style="color:var(--accent);margin-bottom:12px">🔍 Z-Score Anomaly Detection</h3>
+      <p style="color:var(--muted);font-size:0.85rem;margin-bottom:16px"><strong>For OTP % (bounded 0–100)</strong>. Computes an 8-week rolling mean and standard deviation per lane. Flags weeks where |z| > 2.5 (~top 1.2% most extreme).</p>
+      <div style="background:var(--surface2);border-radius:8px;padding:14px;font-family:monospace;font-size:0.82rem">
+        <span style="color:var(--muted)">z = (observed_otp - rolling_mean) / rolling_std</span><br>
+        <span style="color:var(--green)">if |z| > 2.5 → flag as anomaly</span><br>
+        <span style="color:var(--orange)">Result: 659 anomalies flagged</span>
+      </div>
+      <div style="margin-top:16px">
+        <div style="font-size:0.75rem;color:var(--muted);margin-bottom:6px">Severity Distribution</div>
+        <div style="margin-bottom:8px"><span style="font-size:0.8rem">Critical (|z|>3.5)</span><div class="progress-bar"><div class="progress-fill" style="width:18%;background:var(--red)"></div></div></div>
+        <div style="margin-bottom:8px"><span style="font-size:0.8rem">High (|z|>3.0)</span><div class="progress-bar"><div class="progress-fill" style="width:35%;background:var(--orange)"></div></div></div>
+        <div><span style="font-size:0.8rem">Medium (|z|>2.5)</span><div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--accent)"></div></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--purple);margin-bottom:12px">📦 IQR Anomaly Detection</h3>
+      <p style="color:var(--muted);font-size:0.85rem;margin-bottom:16px"><strong>For Cost-per-Mile (heavy right tail)</strong>. Z-score doesn't work for heavily skewed data. IQR (Interquartile Range) method uses fences instead — robust to outliers.</p>
+      <div style="background:var(--surface2);border-radius:8px;padding:14px;font-family:monospace;font-size:0.82rem">
+        <span style="color:var(--muted)">Q1, Q3 = 25th/75th percentile of CPM</span><br>
+        <span style="color:var(--muted)">IQR = Q3 - Q1  (middle 50% range)</span><br>
+        <span style="color:var(--green)">upper_fence = Q3 + 1.5 × IQR</span><br>
+        <span style="color:var(--orange)">Result: 176 anomalies flagged</span>
+      </div>
+      <div style="margin-top:16px;background:rgba(188,140,255,0.05);border:1px solid rgba(188,140,255,0.2);border-radius:8px;padding:12px">
+        <p style="font-size:0.82rem;color:var(--muted)">Why two methods? Because no single method works for all data shapes. OTP is bounded and roughly normal → z-score. CPM has a long tail → IQR. Using both shows statistical sophistication.</p>
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--green);margin-bottom:12px">📈 SARIMAX Forecasting</h3>
+      <p style="color:var(--muted);font-size:0.85rem;margin-bottom:16px"><strong>Seasonal ARIMA for OTP and Cost.</strong> Named so because it handles: <strong>S</strong>easonal, <strong>A</strong>uto-<strong>R</strong>egressive, <strong>I</strong>ntegrated, <strong>M</strong>oving <strong>A</strong>verage patterns.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.8rem">
+        <div style="background:var(--surface2);border-radius:6px;padding:10px;text-align:center"><div style="color:var(--accent);font-weight:700">4 Weeks</div><div style="color:var(--muted)">OTP forecast horizon</div></div>
+        <div style="background:var(--surface2);border-radius:6px;padding:10px;text-align:center"><div style="color:var(--accent);font-weight:700">28 Days</div><div style="color:var(--muted)">Cost forecast horizon</div></div>
+        <div style="background:var(--surface2);border-radius:6px;padding:10px;text-align:center"><div style="color:var(--green);font-weight:700">AIC -278</div><div style="color:var(--muted)">OTP model fit</div></div>
+        <div style="background:var(--surface2);border-radius:6px;padding:10px;text-align:center"><div style="color:var(--green);font-weight:700">95% CI</div><div style="color:var(--muted)">Confidence intervals</div></div>
+      </div>
+      <p style="color:var(--muted);font-size:0.8rem;margin-top:12px">Why SARIMAX over Prophet? It's interpretable. You can explain every parameter. Prophet is a black box — wrong for a BA interview.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- DASHBOARD -->
+<section id="dashboard" class="fade-in">
+  <div class="section-label">Part 7</div>
+  <div class="section-title">6-Page Streamlit Dashboard</div>
+  <div class="section-sub">A live web app running at <a href="http://localhost:8501" style="color:var(--accent)">localhost:8501</a>. Six pages, each targeting a different stakeholder view. Launch with <code style="color:var(--accent);background:var(--surface);padding:2px 8px;border-radius:4px">make app</code>.</div>
+
+  <div class="card-grid card-grid-2">
+    <div class="card" style="border-left:3px solid var(--accent)">
+      <div style="font-size:1.5rem;margin-bottom:8px">📊</div>
+      <h4 style="color:var(--accent);margin-bottom:6px">Page 1 — Executive Summary</h4>
+      <p style="color:var(--muted);font-size:0.85rem">4 KPI cards with month-over-month deltas. 26-week OTP trend with 90% target line. Top-5 issue table. <strong>Audience: VP or Director.</strong></p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--green)">
+      <div style="font-size:1.5rem;margin-bottom:8px">🏥</div>
+      <h4 style="color:var(--green);margin-bottom:6px">Page 2 — Shipper Health Scorecard ⭐</h4>
+      <p style="color:var(--muted);font-size:0.85rem">Composite 0–100 health score per shipper. Filter by vendor type, volume tier, segment. Drill-down shows pricing recommendation. <strong>The Amazon differentiator.</strong></p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--orange)">
+      <div style="font-size:1.5rem;margin-bottom:8px">🗺️</div>
+      <h4 style="color:var(--orange);margin-bottom:6px">Page 3 — Lane Performance</h4>
+      <p style="color:var(--muted);font-size:0.85rem">Origin × Destination OTP heatmap (red/orange/green). Top-10 best and worst lanes side-by-side. <strong>Audience: Lane manager.</strong></p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--purple)">
+      <div style="font-size:1.5rem;margin-bottom:8px">🚛</div>
+      <h4 style="color:var(--purple);margin-bottom:6px">Page 4 — Carrier Scorecard</h4>
+      <p style="color:var(--muted);font-size:0.85rem">Tier-filtered carrier KPIs. Per-carrier lane mix and defect breakdown chart. <strong>Audience: Carrier Account Manager.</strong></p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--red)">
+      <div style="font-size:1.5rem;margin-bottom:8px">🚨</div>
+      <h4 style="color:var(--red);margin-bottom:6px">Page 5 — Anomaly Center</h4>
+      <p style="color:var(--muted);font-size:0.85rem">Browse 659 z-score + 176 IQR anomalies. Download daily briefing markdown. Filter by severity. <strong>Audience: Ops analyst daily standup.</strong></p>
+    </div>
+    <div class="card" style="border-left:3px solid var(--teal)">
+      <div style="font-size:1.5rem;margin-bottom:8px">🔬</div>
+      <h4 style="color:var(--teal);margin-bottom:6px">Page 6 — What-If Simulator ⭐</h4>
+      <p style="color:var(--muted);font-size:0.85rem">Select a lane + new carrier → bootstrap simulation (n=1000) with 95% CI on projected OTP and cost change. <strong>Decision-support analytics.</strong></p>
+    </div>
+  </div>
+
+  <div style="margin-top:32px;background:var(--surface2);border-radius:12px;padding:20px">
+    <h4 style="margin-bottom:8px">Lane OTP Performance — Live Data (Top 12 Lanes by Volume)</h4>
+    <div class="chart-wrap" style="height:300px"><canvas id="laneChart"></canvas></div>
+  </div>
+</section>
+
+<hr class="divider">
+<!-- INSIGHTS -->
+<section id="insights" class="fade-in">
+  <div class="section-label">Part 8</div>
+  <div class="section-title">9 Business Insights — Interview STAR Stories</div>
+  <div class="section-sub">Each insight is a mini Working-Backwards story: pain point → finding → evidence → recommendation. Click any card to expand the recommendation.</div>
+
+  <div class="card-grid card-grid-3">
+    <div class="insight-card" onclick="toggleInsight(this)">
+      <div class="num">01</div>
+      <h3>Monday OTP is 5pp below mid-week</h3>
+      <div class="finding">Weekend backlog creates Monday congestion. Consistent across all carrier tiers. Not explained by volume.</div>
+      <div class="rec">→ Staggered pickup windows: shift 30% of Monday pickups to 06:00–08:00. Expected improvement: +2-3pp Monday OTP.</div>
+      <div class="toggle">Click to see recommendation ↓</div>
+    </div>
+    <div class="insight-card" onclick="toggleInsight(this)">
+      <div class="num">02</div>
+      <h3>Spot carriers cause 80% more defects</h3>
+      <div class="finding">Spot tier: 4.68% defect rate vs 2.58% network avg. On long-haul (>1500mi): exceeds 5%. Chi-square test confirms (p&lt;0.05).</div>
+      <div class="rec">→ Restrict Spot carriers from long-haul lanes. Estimated reduction: 1.5pp defect rate on affected lanes.</div>
+      <div class="toggle">Click to see recommendation ↓</div>
+    </div>
+    <div class="insight-card" onclick="toggleInsight(this)">
+      <div class="num">03</div>
+      <h3>15% of LTL loads are FTL-sized</h3>
+      <div class="finding">LTL lanes with >70% fill and >30K lbs. Paying LTL premium for FTL-scale loads. 15-20% cost reduction possible.</div>
+      <div class="rec">→ Flag top 15 modal mismatch lanes for FTL conversion review. Work with shippers to consolidate weekly orders.</div>
+      <div class="toggle">Click to see recommendation ↓</div>
+    </div>
+    <div class="insight-card" onclick="toggleInsight(this)">
+      <div class="num">04</div>
+      <h3>Accessorials = 15% of total cost</h3>
+      <div class="finding">Dominant driver: detention at destination. Carriers with dwell P90 > 120 min charge 25-30% more in accessorials.</div>
+      <div class="rec">→ 2-hour detention clock with auto-escalation at 90 min. Target 10 facilities with highest dwell P90 first.</div>
+      <div class="toggle">Click to see recommendation ↓</div>
+    </div>
+    <div class="insight-card" onclick="toggleInsight(this)">
+      <div class="num">05</div>
+      <h3>Q4 lifts cost 12% — statistically confirmed</h3>
+      <div class="finding">Mann-Whitney test (q33) confirms Q4 CPM is significantly higher than non-Q4 (p&lt;0.05). ~$0.40/mile premium.</div>
+      <div class="rec">→ Lock Q4 contract rates by August. Use SARIMAX 28-day forecast to alert procurement when rates spike above CI.</div>
+      <div class="toggle">Click to see recommendation ↓</div>
+    </div>
+    <div class="insight-card" onclick="toggleInsight(this)">
+      <div class="num">06</div>
+      <h3>5 top shippers showing churn signals</h3>
+      <div class="finding">5 top-20 shippers: >30% volume decline in last 90 days vs prior 90. 3 also received below-average OTD.</div>
+      <div class="rec">→ Trigger account review for SHS &lt;50 + negative growth. Proactive retention outreach before churn is irreversible.</div>
+      <div class="toggle">Click to see recommendation ↓</div>
+    </div>
+    <div class="insight-card" onclick="toggleInsight(this)">
+      <div class="num">07</div>
+      <h3>Strategic beats Tactical by 5-8pp OTP</h3>
+      <div class="finding">Paired t-test (q31): 90.2% vs 80.4% OTP. Difference statistically significant (|t| >> 1.96). Holds lane-by-lane.</div>
+      <div class="rec">→ Shift 10% of Tactical volume on underperforming lanes to Strategic. Model impact in What-If Simulator first.</div>
+      <div class="toggle">Click to see recommendation ↓</div>
+    </div>
+    <div class="insight-card" onclick="toggleInsight(this)">
+      <div class="num">08</div>
+      <h3>10+ long-haul lanes are intermodal candidates</h3>
+      <div class="finding">FTL lanes >1500mi with weekly volume supporting containers. Current CPM $3.20+; intermodal benchmark ~$2.50-2.70.</div>
+      <div class="rec">→ Pilot intermodal on top 5 candidate lanes. Accept 48h→120h transit in exchange for 15-20% CPM reduction.</div>
+      <div class="toggle">Click to see recommendation ↓</div>
+    </div>
+    <div class="insight-card" onclick="toggleInsight(this)">
+      <div class="num">09</div>
+      <h3>4-week OTP forecast shows continued decline</h3>
+      <div class="finding">SARIMAX forecast: 95% CI does not include 90% target for any of the 4 forecast weeks. Structural, not noise.</div>
+      <div class="rec">→ Activate carrier escalation protocol NOW. Identify whether decline is carrier-specific or lane-specific and target interventions.</div>
+      <div class="toggle">Click to see recommendation ↓</div>
+    </div>
+  </div>
+
+  <div style="margin-top:32px">
+    <div class="chart-container">
+      <div class="chart-title">Defect Reason Pareto — Where Do Defects Come From?</div>
+      <div class="chart-sub">q09: Cumulative defect reasons — top 3 drivers account for ~65% of all defects</div>
+      <div class="chart-wrap"><canvas id="defectChart"></canvas></div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- RESUME IMPACT -->
+<section id="resume" class="fade-in">
+  <div class="section-label">Part 9</div>
+  <div class="section-title">Why This Dominates Your Resume</div>
+  <div class="section-sub">Most BA candidates claim skills. You have executable evidence for every claim in the Amazon JD.</div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;margin-bottom:40px">
+    <div class="card">
+      <h4 style="color:var(--accent);margin-bottom:16px">What Other Candidates Put</h4>
+      <div style="color:var(--muted);font-size:0.87rem;line-height:2">
+        <div>• "Proficient in SQL"</div>
+        <div>• "Experience with Excel"</div>
+        <div>• "Data visualization skills"</div>
+        <div>• "Analytical mindset"</div>
+        <div>• "Titanic dataset analysis"</div>
+      </div>
+    </div>
+    <div class="card" style="border-color:var(--green)">
+      <h4 style="color:var(--green);margin-bottom:16px">What You Put</h4>
+      <div style="font-size:0.87rem;line-height:2">
+        <div>• "35 SQL queries incl. t-test, chi-square, Mann-Whitney in pure SQL"</div>
+        <div>• "6-sheet Excel pivot pack with VBA auto-refresh macro"</div>
+        <div>• "6-page Streamlit dashboard with bootstrap What-If Simulator"</div>
+        <div>• "SARIMAX OTP + cost forecasting, 95% CI"</div>
+        <div>• "1M+ shipment warehouse — link: github.com/..."</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+    <div class="resume-item" style="padding:20px">
+      <div class="resume-check">✓</div>
+      <div><h4>SQL (Required)</h4><p>35 queries: JOINs, CTEs, window functions (RANK, LAG, rolling AVG), PERCENTILE_CONT, conditional aggregation, 3 hypothesis tests computed entirely in SQL without Python.</p></div>
+    </div>
+    <div class="resume-item" style="padding:20px">
+      <div class="resume-check">✓</div>
+      <div><h4>Excel + Macros (Required)</h4><p>Generated 6-sheet pivot pack: formatted headers, conditional formatting (red/yellow/green heatmap), auto-filters, frozen panes. Plus <code>vba/auto_refresh.bas</code> — an actual VBA macro file in the repo.</p></div>
+    </div>
+    <div class="resume-item" style="padding:20px">
+      <div class="resume-check">✓</div>
+      <div><h4>Forecasting (Preferred)</h4><p>SARIMAX(1,1,1)(1,1,1,4) for weekly OTP, SARIMAX(1,1,1)(1,1,1,7) for daily cost. Not Excel trend lines — a real time-series model with AIC/BIC reported and 95% CI outputs.</p></div>
+    </div>
+    <div class="resume-item" style="padding:20px">
+      <div class="resume-check">✓</div>
+      <div><h4>Quantitative / Statistical Skills</h4><p>Three hypothesis tests in SQL: paired t-test (carrier tier OTP), chi-square independence test (defect vs. tier), Mann-Whitney U (Q4 cost lift). Conclusions stated in plain business language.</p></div>
+    </div>
+    <div class="resume-item" style="padding:20px">
+      <div class="resume-check">✓</div>
+      <div><h4>"Our Customer is the Shipper" (Amazon-Specific)</h4><p>Page 2 of the Streamlit app is the Shipper Health Scorecard — not a carrier scorecard. This is the design decision that shows you read the JD and understand AIT's charter.</p></div>
+    </div>
+    <div class="resume-item" style="padding:20px">
+      <div class="resume-check">✓</div>
+      <div><h4>Amazon Leadership Principles</h4><p><strong>Customer Obsession</strong> (shipper-centric), <strong>Dive Deep</strong> (P50/P90/P99, hypothesis tests), <strong>Bias for Action</strong> (daily briefing with recommended actions), <strong>Insist on Highest Standards</strong> (30/30 tests, Decimal cost math, cited benchmarks).</p></div>
+    </div>
+  </div>
+
+  <!-- Shipper chart -->
+  <div style="margin-top:32px">
+    <div class="chart-container">
+      <div class="chart-title">Top 10 Shippers — Health Score vs OTD Rate</div>
+      <div class="chart-sub">Composite Shipper Health Score (0–100). Higher = better service quality, cost efficiency, and growth.</div>
+      <div class="chart-wrap" style="height:300px"><canvas id="shipperChart"></canvas></div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- INTERVIEW GUIDE -->
+<section class="fade-in">
+  <div class="section-label">Part 10</div>
+  <div class="section-title">Interview Cheat Sheet</div>
+  <div class="section-sub">Word-for-word answers for the four most likely questions.</div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('int-1')">Walk Me Through</button>
+    <button class="tab" onclick="showTab('int-2')">SQL Skills</button>
+    <button class="tab" onclick="showTab('int-3')">Hardest Bug</button>
+    <button class="tab" onclick="showTab('int-4')">Messy Data</button>
+  </div>
+
+  <div class="tab-content active" id="int-1">
+    <div class="card" style="border-color:var(--accent)">
+      <h4 style="color:var(--accent);margin-bottom:12px">❝ Tell me about a project where you used data to drive a decision. ❞</h4>
+      <p style="font-size:0.9rem;line-height:1.8">"I built an inbound first-mile analytics platform analyzing over a million shipment records across 225 lanes, 52 carriers, and 340 shippers. I discovered that Monday pickups run 5 percentage points below mid-week OTP — not because of volume spikes, but because of weekend backlog creating morning congestion. I validated this with day-of-week SQL analysis (q06) and a rolling trend view (q07), then recommended staggered pickup windows. I also found that Spot-tier carriers on long-haul lanes produce 80% more defects than the network average, confirmed by a chi-square test at p&lt;0.05 (q32), and recommended restricting them from those lanes. The project runs end-to-end from a single command — link is in my application materials."</p>
+    </div>
+  </div>
+
+  <div class="tab-content" id="int-2">
+    <div class="card" style="border-color:var(--accent)">
+      <h4 style="color:var(--accent);margin-bottom:12px">❝ Walk me through your SQL skills with an example. ❞</h4>
+      <p style="font-size:0.9rem;line-height:1.8">"Let me show you three queries at increasing complexity. First, q07 uses a CTE to compute weekly OTP, then a window function with ROWS BETWEEN 3 PRECEDING AND CURRENT ROW for a rolling 4-week average — you see the trend before it becomes a crisis. Second, q14 computes a lane profitability index by comparing observed CPM to the Cass 2024 benchmark of $2.43/mile, using NULLIF to handle zero-distance edge cases and HAVING to filter low-volume lanes. Third — and this is the one I'm most proud of — q31 implements a paired t-test entirely in SQL, no Python. It pairs Strategic and Tactical carriers by lane, computes the mean OTP difference, standard deviation, and t-statistic, then prints 'REJECT H0' or 'FAIL TO REJECT H0' in the result set. The t-statistic comes out way above 1.96, confirming that Strategic carriers really are significantly better — it's not just random noise."</p>
+    </div>
+  </div>
+
+  <div class="tab-content" id="int-3">
+    <div class="card" style="border-color:var(--red)">
+      <h4 style="color:var(--red);margin-bottom:12px">❝ Tell me about a hard technical bug you encountered. ❞</h4>
+      <p style="font-size:0.9rem;line-height:1.8">"My cost identity check — linehaul + fuel + accessorial must exactly equal total_cost — was failing by pennies. Something like $135.20 stored as $135.19999999999998. The root cause was Python float arithmetic accumulating rounding error. $100.10 + $20.03 + $15.07 in IEEE 754 floats sometimes gives you 135.19999... not 135.20. I fixed it by switching the entire cost computation in generate_data.py to Python's Decimal type with 2-decimal-place quantization (quantize(Decimal('0.01'))). The identity now holds exactly — to the penny — across all 1,025,275 rows, proven by test_warehouse_integrity.py::test_cost_identity_exact which asserts zero rows with a mismatch. Lesson: never use floats for money."</p>
+    </div>
+  </div>
+
+  <div class="tab-content" id="int-4">
+    <div class="card" style="border-color:var(--orange)">
+      <h4 style="color:var(--orange);margin-bottom:12px">❝ How do you handle messy or incomplete data? ❞</h4>
+      <p style="font-size:0.9rem;line-height:1.8">"I built messiness into the data intentionally so I'd have to handle it properly. 0.41% of pickup timestamps are NULL — tracking failures where the EDI feed dropped. My OTP query uses on_time_pickup BOOLEAN (pre-computed during load) and my anomaly detector only uses non-NULL records when computing rolling averages. 0.10% of dwell times are negative — drivers who arrived before their appointment window. My KPI queries use FILTER (WHERE dwell_minutes > 0) when computing averages, and q35 is a dedicated negative dwell audit query. The quality_checks.py module validates all of this on every pipeline run — it asserts that NULL pickups stay below 0.5% and negative dwell below 0.15%, so if data quality degrades I catch it before it silently corrupts downstream analytics."</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p style="margin-bottom:8px">🚛 First-Mile Carrier Performance Dashboard — Amazon AIT BizOps BA-I Portfolio Project</p>
+  <p>1,025,275 shipments · 35 SQL queries · 30/30 tests · 6-page dashboard · SARIMAX forecasting · 9 business insights</p>
+  <p style="margin-top:8px">Built with Python · DuckDB · Streamlit · Chart.js · statsmodels · openpyxl</p>
+</footer>
+<script>
+// ── DATA from warehouse ──
+const D = {
+  weeklyDates: ["2025-05-19","2025-06-02","2025-06-16","2025-06-30","2025-07-14","2025-07-28","2025-08-11","2025-08-25","2025-09-08","2025-09-22","2025-10-06","2025-10-20","2025-11-03","2025-11-17","2025-12-01","2025-12-15","2026-01-05","2026-01-19","2026-02-02","2026-02-16","2026-03-02","2026-03-16","2026-03-30","2026-04-13","2026-04-27","2026-05-11"],
+  weeklyOTP: [86.3,85.8,86.0,85.7,86.3,85.8,85.5,85.9,85.9,85.6,85.6,86.2,85.8,86.2,85.4,85.6,86.0,85.7,86.3,85.7,86.1,85.8,86.1,85.5,80.8,81.0],
+  tiers: ["Strategic","Core","Tactical","Spot"],
+  tierOTP: [90.2,85.4,80.4,73.8],
+  tierCPM: [3.23,3.52,3.62,3.99],
+  tierDefect: [1.88,2.58,3.54,4.68],
+  defectReasons: ["Damaged Freight","Wrong Count","Late Delivery","Late Pickup","Missing Paperwork","Refused Shipment","Temp Excursion"],
+  defectCounts: [7620,4911,4105,3988,3231,1858,1377],
+  monthlyCPM: [3.35,3.35,3.35,3.35,3.35,3.76,3.76,3.75,3.35,3.35,3.35,3.35,3.35],
+  monthlyLabels: ["May'25","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan'26","Feb","Mar","Apr","May"],
+  shipperNames: ["Shipper-271","Shipper-183","Shipper-266","Shipper-336","Shipper-333","Shipper-335","Shipper-319","Shipper-323","Shipper-268","Shipper-138"],
+  shipperSHS: [85.2,84.0,83.3,82.9,82.7,82.6,82.6,82.4,82.3,82.3],
+  shipperOTD: [97.0,97.1,97.8,97.1,97.5,97.0,97.7,97.0,96.4,97.7],
+  laneLabels: ["Charlotte→ATL7","Dallas→DFW5","Chicago→ATL7","Indianapolis→LGA9","Charlotte→RIC1","Harrisburg→ATL7","Kansas City→IAD2","Harrisburg→LGA9","Portland→BWI1","Jacksonville→DFW5","Jacksonville→BWI1","Denver→LGA9"],
+  laneOTP: [89.2,80.2,80.6,89.0,88.1,88.7,88.7,85.1,85.3,88.0,81.0,89.0],
+  laneVol: [4757,4739,4735,4727,4717,4707,4700,4682,4682,4674,4674,4673]
+};
+
+const colors = {
+  accent:'#58a6ff', green:'#3fb950', red:'#f85149',
+  orange:'#d29922', purple:'#bc8cff', muted:'#8b949e',
+  surface:'#21262d'
+};
+
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#30363d';
+Chart.defaults.font.family = "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
+
+// OTP Chart
+new Chart(document.getElementById('otpChart'), {
+  type:'line',
+  data:{
+    labels: D.weeklyDates,
+    datasets:[
+      {label:'Weekly OTP %', data:D.weeklyOTP, borderColor:colors.accent, backgroundColor:'rgba(88,166,255,0.08)', fill:true, tension:0.3, pointRadius:2, pointHoverRadius:5},
+      {label:'Target 90%', data:D.weeklyDates.map(()=>90), borderColor:'rgba(63,185,80,0.5)', borderDash:[6,3], pointRadius:0}
+    ]
+  },
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true},tooltip:{mode:'index',intersect:false}},scales:{y:{min:78,max:94,ticks:{callback:v=>v+'%'}}}}
+});
+
+// CPM Chart
+new Chart(document.getElementById('cpmChart'), {
+  type:'bar',
+  data:{
+    labels: D.monthlyLabels,
+    datasets:[{
+      label:'Cost/Mile ($)',
+      data: D.monthlyCPM,
+      backgroundColor: D.monthlyCPM.map(v => v>3.5 ? 'rgba(248,81,73,0.7)' : 'rgba(88,166,255,0.7)'),
+      borderRadius:6
+    },{
+      label:'Benchmark $2.43',
+      data: D.monthlyLabels.map(()=>2.43),
+      type:'line', borderColor:'rgba(63,185,80,0.6)', borderDash:[6,3], pointRadius:0
+    }]
+  },
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true},tooltip:{mode:'index',intersect:false}},scales:{y:{min:0,max:4.5,ticks:{callback:v=>'$'+v}}}}
+});
+
+// Tier scatter
+new Chart(document.getElementById('tierChart'), {
+  type:'scatter',
+  data:{
+    datasets: D.tiers.map((t,i)=>({
+      label:t,
+      data:[{x:D.tierCPM[i], y:D.tierOTP[i]}],
+      backgroundColor:['rgba(88,166,255,0.8)','rgba(63,185,80,0.8)','rgba(210,153,34,0.8)','rgba(248,81,73,0.8)'][i],
+      pointRadius:14
+    }))
+  },
+  options:{responsive:true,maintainAspectRatio:false,plugins:{tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: OTP ${ctx.parsed.y}%, CPM $${ctx.parsed.x}`}}},scales:{x:{title:{display:true,text:'Cost per Mile ($)'},min:3.0,max:4.2},y:{title:{display:true,text:'OTP %'},min:70,max:94}}}
+});
+
+// Defect Pareto
+const defectPct = D.defectCounts.map(c=>Math.round(c/D.defectCounts.reduce((a,b)=>a+b,0)*1000)/10);
+const cumulative = defectPct.reduce((acc,v,i)=>[...acc,(acc[i-1]||0)+v],[]);
+new Chart(document.getElementById('defectChart'), {
+  type:'bar',
+  data:{
+    labels: D.defectReasons,
+    datasets:[
+      {label:'% of Defects', data:defectPct, backgroundColor:'rgba(248,81,73,0.7)', borderRadius:6, yAxisID:'y'},
+      {label:'Cumulative %', data:cumulative, type:'line', borderColor:colors.orange, pointBackgroundColor:colors.orange, pointRadius:4, yAxisID:'y2'}
+    ]
+  },
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true}},scales:{y:{title:{display:true,text:'% of Defects'}},y2:{position:'right',title:{display:true,text:'Cumulative %'},min:0,max:100,ticks:{callback:v=>v+'%'},grid:{display:false}}}}
+});
+
+// Lane OTP
+new Chart(document.getElementById('laneChart'), {
+  type:'bar',
+  data:{
+    labels: D.laneLabels,
+    datasets:[{
+      label:'OTP %',
+      data: D.laneOTP,
+      backgroundColor: D.laneOTP.map(v => v>=89?'rgba(63,185,80,0.75)': v>=85?'rgba(210,153,34,0.75)':'rgba(248,81,73,0.75)'),
+      borderRadius:6
+    }]
+  },
+  options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`OTP: ${ctx.parsed.x}%`}}},scales:{x:{min:75,max:93,ticks:{callback:v=>v+'%'}},y:{ticks:{font:{size:11}}}}}
+});
+
+// Shipper chart
+new Chart(document.getElementById('shipperChart'), {
+  type:'bar',
+  data:{
+    labels: D.shipperNames,
+    datasets:[
+      {label:'Health Score (0-100)', data:D.shipperSHS, backgroundColor:'rgba(88,166,255,0.7)', borderRadius:6, yAxisID:'y'},
+      {label:'OTD Rate (%)', data:D.shipperOTD, type:'line', borderColor:colors.green, pointBackgroundColor:colors.green, pointRadius:5, yAxisID:'y2'}
+    ]
+  },
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true}},scales:{y:{min:0,max:100,title:{display:true,text:'Health Score'}},y2:{position:'right',min:94,max:100,title:{display:true,text:'OTD %'},grid:{display:false},ticks:{callback:v=>v+'%'}}}}
+});
+
+// ── INTERACTIVITY ──
+const pipeData = [
+  {title:'⚙️ Config (src/config.py)',desc:'466 lines of benchmark constants, every one cited to a public source.',items:['OTP baseline 87% → FreightWaves SONAR 2024','CPM $2.43/mile → Cass Freight Index 2024','Dwell P90 120min → Trucker Tools 2024 Detention Study','Top-20 shipper 55% → FreightWaves SONAR 2024']},
+  {title:'🧬 Data Generator (src/generate_data.py)',desc:'Creates 1,025,275 shipment records plus 5 dimension CSVs in ~7 seconds.',items:['Power-law shipper volumes (Pareto α=1.5)','4 carrier tiers with realistic OTP/defect/cost','Injected 14-day OTP anomaly (z=-3.1)','Decimal arithmetic for exact cost identity']},
+  {title:'🗄️ Warehouse (src/build_warehouse.py + sql/ddl/)',desc:'Loads CSVs into DuckDB star schema. 6 DDL files + 6 analytical views.',items:['fact_shipment: 1,025,275 rows','5 dimension tables (carrier/lane/shipper/date/service)','6 SQL views: shipper health, carrier scorecard, lane perf, weekly KPIs, cost-to-serve, anomaly flags','9 quality checks: all passing']},
+  {title:'📊 SQL Queries (sql/queries/)',desc:'35 numbered business queries organized into 5 categories.',items:['Operations (q01-q10): OTP, dwell, defects, trends','Cost (q11-q18): CPM, accessorials, profitability, Q4 lift','Utilization (q19-q26): trailer fill, modal mismatch, intermodal','Anomaly (q27-q30): WoW changes, dwell spikes','Statistical (q31-q35): t-test, chi-square, Mann-Whitney U']},
+  {title:'🔍 Anomaly Detection (src/anomaly_detection.py)',desc:'Two-method anomaly detection + daily markdown briefing generation.',items:['Z-score: 8-week rolling mean/std per lane → 659 flagged','IQR: Q3 + 1.5×IQR per lane type → 176 flagged','Reason hints: explains WHY each anomaly occurred','Daily briefing: auto-generated markdown for ops standup']},
+  {title:'📈 Forecasting (src/forecasting.py)',desc:'SARIMAX time-series models for OTP and cost with confidence intervals.',items:['OTP: SARIMAX(1,1,1)(1,1,1,4) weekly, 4-week horizon, AIC=-278','Cost: SARIMAX(1,1,1)(1,1,1,7) daily, 28-day horizon','95% prediction intervals on all forecasts','Saves CSV + publication-quality PNG charts']},
+  {title:'💰 Pricing Recommendations (src/pricing_recommendations.py)',desc:'Per-shipper pricing engine for top-20 accounts.',items:['Computes revenue estimate vs actual cost','Flags unprofitable shippers (Renegotiate Up)','Rewards growing/loyal shippers (Volume Discount)','Output: 20 recommendations with driver explanations']},
+  {title:'📋 Excel Pivot Pack (src/excel_pivot_pack.py + vba/)',desc:'6-sheet formatted workbook generated by Python + a VBA macro.',items:['Cover: KPI snapshot','Carrier Scorecard: OTP/defect/CPM by month','Lane Heatmap: conditional formatting (red/yellow/green)','Shipper Cost-to-Serve: top shipper pivot','Accessorial Drivers: cost by reason','VBA: auto_refresh.bas macro for pivot refresh']},
+  {title:'🖥️ Streamlit Dashboard (app/streamlit_app.py)',desc:'6-page interactive web app. Launch with: make app',items:['Page 1: Executive Summary (VP view)','Page 2: Shipper Health Scorecard (the Amazon differentiator)','Page 3: Lane Performance with OTP heatmap','Page 4: Carrier Scorecard with defect drill-down','Page 5: Anomaly Center + daily briefing download','Page 6: What-If Simulator (bootstrap CI)']},
+  {title:'✅ Tests (tests/) — 30/30 Passing',desc:'Automated pytest suite validating every stage of the pipeline.',items:['Data: row count, FK integrity, shipper concentration, cost identity','Anomaly: CSV existence, required columns, reason hints','Forecasting: horizon length, CI validity','Excel: 6 sheets, correct names, data presence']}
+];
+
+function showPipe(i) {
+  const detail = document.getElementById('pipe-detail');
+  const title = document.getElementById('pipe-title');
+  const desc = document.getElementById('pipe-desc');
+  const list = document.getElementById('pipe-list');
+  const steps = document.querySelectorAll('.pipe-step');
+  steps.forEach((s,j)=>s.classList.toggle('active', j===i));
+  title.textContent = pipeData[i].title;
+  desc.textContent = pipeData[i].desc;
+  list.innerHTML = pipeData[i].items.map(item=>`<li>${item}</li>`).join('');
+  detail.classList.add('visible');
+}
+
+function showTab(id) {
+  const parent = document.getElementById(id).closest('section, div');
+  parent.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  parent.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function toggleInsight(card) {
+  card.classList.toggle('open');
+  const toggle = card.querySelector('.toggle');
+  toggle.textContent = card.classList.contains('open') ? 'Click to hide ↑' : 'Click to see recommendation ↓';
+}
+
+function copySQL(btn) {
+  const block = btn.parentElement;
+  const text = block.innerText.replace('Copy','').trim();
+  navigator.clipboard.writeText(text).then(()=>{btn.textContent='Copied!';setTimeout(()=>btn.textContent='Copy',2000)});
+}
+
+// Nav active state
+const sections = document.querySelectorAll('section[id], #hero');
+const navLinks = document.querySelectorAll('.nav-links a');
+const observer = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      navLinks.forEach(l=>{l.classList.toggle('active', l.getAttribute('href')==='#'+e.target.id)});
+    }
+  });
+},{threshold:0.3});
+sections.forEach(s=>observer.observe(s));
+
+// Fade-in
+const fadeObs = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible')});
+},{threshold:0.1});
+document.querySelectorAll('.fade-in').forEach(el=>fadeObs.observe(el));
+
+// Count-up animation
+function countUp(el) {
+  const target = parseInt(el.dataset.target);
+  const duration = 2000;
+  const step = target / (duration / 16);
+  let current = 0;
+  const timer = setInterval(()=>{
+    current = Math.min(current + step, target);
+    el.textContent = Math.floor(current).toLocaleString();
+    if(current >= target) clearInterval(timer);
+  }, 16);
+}
+const countObs = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{if(e.isIntersecting){document.querySelectorAll('.count-up').forEach(countUp);countObs.disconnect();}});
+},{threshold:0.5});
+document.querySelector('.hero-stats') && countObs.observe(document.querySelector('.hero-stats'));
+</script>
+</body>
+</html>

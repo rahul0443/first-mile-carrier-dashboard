@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific: large generated files (regenerate with `make all`)
+data/raw/*.csv
+data/warehouse.duckdb
+data/warehouse.duckdb.wal
+
+# Reports that are regenerated
+reports/pivot_pack.xlsx
+reports/forecast_otp.png
+reports/forecast_cost.png
+reports/pricing_recommendations.csv
+reports/daily_briefings/*.md
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# pytest
+.pytest_cache/
+
+# ruff
+.ruff_cache/
